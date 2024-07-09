@@ -17,6 +17,7 @@ contract L1Vault is Ownable {
     }
 
     function approveTo(address target, uint256 amount) external onlyOwner {
+        //@audit -low this should check for return value of approve.
         token.approve(target, amount);
     }
 }

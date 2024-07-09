@@ -27,6 +27,7 @@ import { L1Vault } from "./L1Vault.sol";
 contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    //@audit deposit limit should be constant.
     uint256 public DEPOSIT_LIMIT = 100_000 ether;
 
     IERC20 public immutable token;
@@ -43,6 +44,7 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
         token = _token;
         vault = new L1Vault(token);
         // Allows the bridge to move tokens out of the vault to facilitate withdrawals
+        //giving max approval of tokens to the BossBridge contract.
         vault.approveTo(address(this), type(uint256).max);
     }
 
@@ -67,13 +69,18 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
      * @param l2Recipient The address of the user who will receive the tokens on L2
      * @param amount The amount of tokens to deposit
      */
+    //@if a user approves the bridge, then any other can steal their funds by simply calling the depositTokensToL2().
     function depositTokensToL2(address from, address l2Recipient, uint256 amount) external whenNotPaused {
+        //@audit avoid using of token.balanceOf -- there is a chance of dos atttack 
         if (token.balanceOf(address(vault)) + amount > DEPOSIT_LIMIT) {
             revert L1BossBridge__DepositLimitReached();
         }
+        
+        
         token.safeTransferFrom(from, address(vault), amount);
 
         // Our off-chain service picks up this event and mints the corresponding tokens on L2
+        //@audit -low need to follow CEI, this should be at line 79
         emit Deposit(from, l2Recipient, amount);
     }
 
@@ -109,6 +116,7 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
      * @param s The s value of the signature
      * @param message The message/data to be sent to L1 (can be blank)
      */
+    //@audit prone to signature replay attacks.
     function sendToL1(uint8 v, bytes32 r, bytes32 s, bytes memory message) public nonReentrant whenNotPaused {
         address signer = ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(keccak256(message)), v, r, s);
 
@@ -123,4 +131,7 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
             revert L1BossBridge__CallFailed();
         }
     }
+
+    
+
 }
